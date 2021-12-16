@@ -17,7 +17,8 @@ build-queue: ## build queue Docker image
 	docker image build -f ./cmd/queue/Dockerfile --tag queue .
 
 .PHONY: build-all
-build-all: build-seeker build-queue ## build all applications
+build-compose: ## build all applications
+	docker-compose build
 
 .PHONY: help
 help: ## Display this help.

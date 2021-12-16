@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  queue:
+    build: 
+      context: .
+      dockerfile: ./cmd/queue/Dockerfile
+  seeker:
+    build: 
+      context: .
+      dockerfile: ./cmd/seeker/Dockerfile
+    depends_on:
+      - queue

@@ -4,6 +4,6 @@ services:
   gatekeeper:
     build:
       context: .
-      dockerfile: ./cmd/wikipedia/seeker/Dockerfile
+      dockerfile: ./cmd/seeker/Dockerfile
     ports:
       - 8080:8080

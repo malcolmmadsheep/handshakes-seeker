@@ -9,18 +9,20 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	ahandlers "github.com/malcolmmadsheep/handshakes-seeker/pkg/handlers"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/plugin"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/queue"
 )
 
 type Seeker struct {
-	cfg     Config
-	plugins []plugin.Plugin
+	cfg      Config
+	plugins  []plugin.Plugin
+	handlers *ahandlers.Handlers
 }
 
 type Config struct{}
 
-func New(cfg Config, plugins []plugin.Plugin) (*Seeker, error) {
+func New(shutdownCtx context.Context, cfg Config, handlers ahandlers.Handlers, plugins []plugin.Plugin) (*Seeker, error) {
 	if len(plugins) == 0 {
 		return nil, errors.New("there should be at least one plugin provided")
 	}
@@ -28,11 +30,27 @@ func New(cfg Config, plugins []plugin.Plugin) (*Seeker, error) {
 	return &Seeker{
 		cfg,
 		plugins,
+		&handlers,
 	}, nil
 }
 
+var i int = 0
+
 func (s *Seeker) ReadTasks(pluginName string) []queue.Task {
-	return make([]queue.Task, 0)
+	if i == 0 {
+		i += 1
+		return []queue.Task{
+			[]byte(`{"source": "Haiti", "dest": "Hawaii"}`),
+		}
+	} else if i == 1 {
+		i += 1
+		return []queue.Task{
+			[]byte(`{"source": "Hawaii", "dest": "Madagascar"}`),
+		}
+	} else {
+		i += 1
+		return []queue.Task{}
+	}
 }
 
 func (s *Seeker) startQueues() {
@@ -72,22 +90,15 @@ func (s *Seeker) startQueues() {
 	}
 }
 
-func createHTTPServer() *http.Server {
+func createHTTPServer(handlers *ahandlers.Handlers) *http.Server {
 	apiRouter := mux.NewRouter().StrictSlash(false).PathPrefix("/api/v1").Subrouter()
 
-	apiRouter.HandleFunc("/task", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "POST task\n")
-	}).Methods(http.MethodPost)
+	apiRouter.HandleFunc("/task", (*handlers).CreateTask).Methods(http.MethodPost)
 
 	taskSubrouter := apiRouter.PathPrefix("/task/{taskId}").Subrouter()
 
-	taskSubrouter.HandleFunc("", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "GET task")
-	}).Methods(http.MethodGet)
-
-	taskSubrouter.HandleFunc("", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "DELETE task")
-	}).Methods(http.MethodDelete)
+	taskSubrouter.HandleFunc("", (*handlers).GetPath).Methods(http.MethodGet)
+	taskSubrouter.HandleFunc("", (*handlers).DeleteTask).Methods(http.MethodDelete)
 
 	return &http.Server{
 		Handler:      apiRouter,
@@ -100,7 +111,7 @@ func createHTTPServer() *http.Server {
 func (s *Seeker) Run() error {
 	s.startQueues()
 
-	srv := createHTTPServer()
+	srv := createHTTPServer(s.handlers)
 
 	return srv.ListenAndServe()
 }

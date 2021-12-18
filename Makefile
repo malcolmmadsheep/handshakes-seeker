@@ -12,13 +12,9 @@ run-dev: ## start full application as docker compose
 build-seeker: ## build seeker Docker image
 	docker image build -f ./cmd/seeker/Dockerfile --tag seeker .
 
-.PHONY: build-queue
-build-queue: ## build queue Docker image
-	docker image build -f ./cmd/queue/Dockerfile --tag queue .
-
-.PHONY: build-all
-build-compose: ## build all applications
-	docker-compose build
+.PHONY: build-run-seeker
+build-run-seeker: build-seeker
+	docker container run seeker
 
 .PHONY: help
 help: ## Display this help.

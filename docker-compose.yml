@@ -4,18 +4,6 @@ services:
   gatekeeper:
     build:
       context: .
-      dockerfile: ./cmd/gatekeeper/Dockerfile
+      dockerfile: ./cmd/wikipedia/seeker/Dockerfile
     ports:
       - 8080:8080
-  queue:
-    build: 
-      context: .
-      dockerfile: ./cmd/queue/Dockerfile
-    depends_on:
-      - gatekeeper
-  seeker:
-    build: 
-      context: .
-      dockerfile: ./cmd/seeker/Dockerfile
-    depends_on:
-      - queue

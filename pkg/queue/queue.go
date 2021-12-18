@@ -39,16 +39,18 @@ func (q *Queue) StartConsuming(ctx context.Context) <-chan Task {
 	consumeChan := make(chan Task)
 
 	go func() {
-		time.Sleep(q.config.Delay)
+		for {
+			time.Sleep(q.config.Delay)
 
-		select {
-		case <-ctx.Done():
-			return
-		case <-q.stopConsumingCh:
-			return
-		case task := <-q.tasks:
-			{
-				consumeChan <- task
+			select {
+			case <-ctx.Done():
+				return
+			case <-q.stopConsumingCh:
+				return
+			case task := <-q.tasks:
+				{
+					consumeChan <- task
+				}
 			}
 		}
 	}()

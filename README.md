@@ -42,7 +42,7 @@ make
 - [x] configure docker-compose
 - [x] implement queue
 - [x] configure Postgres container and setup connection within the service
-- [ ] setup db migrations (go-migrate)
+- [x] setup db migrations (go-migrate)
 - [ ] create tables in db
 - [ ] implement application logic
 - [ ] implement wikipedia plugin logic

@@ -22,6 +22,11 @@ func main() {
 	}
 	log.Println("Successfully connected to database...")
 
+	err = runDBMigration(conn)
+	if err != nil {
+		log.Fatalf("DB migration failed %s", err)
+	}
+
 	handlers := dbhandlers.New(conn)
 	wikipediaPlugin := &plugins.WikipediaPlugin{}
 

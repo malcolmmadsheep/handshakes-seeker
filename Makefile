@@ -1,10 +1,35 @@
 .DEFAULT_GOAL:=help
 
+docker_volume = handshakes_db
+create_db_container = create_db_container
+
 ##@ Run
 
 .PHONY: run-dev
 run-dev: ## start full application as docker compose
 	docker-compose up
+
+##@ Database
+
+.PHONY: setup-db
+setup-db:
+	docker volume create $(docker_volume)
+	docker container stop $(create_db_container) || true
+	docker container run \
+	--volume $(docker_volume):/var/lib/postgresql/data \
+	--rm \
+	-d \
+	--name $(create_db_container) \
+	-e POSTGRES_PASSWORD=password \
+	postgres:14
+	docker container exec -it $(create_db_container) psql -h localhost -U postgres -c 'create database handshakes;' || true
+	docker container stop $(create_db_container)	
+
+.PHONY: add-migration
+add-migration: ## create new db migration. Migration name should be provided with "MIGRATION_NAME". Usage example: MIGRATION_NAME=test make add-migration
+	if [[ "$(which migrate)" == "" ]]; then go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest; fi
+	if [[ "${MIGRATION_NAME}" == "" ]]; then echo "MIGRATION_NAME should be provided" && exit 1; fi
+	migrate create -ext sql -dir migrations ${MIGRATION_NAME}
 
 ##@ Build
 
@@ -15,6 +40,10 @@ build-seeker: ## build seeker Docker image
 .PHONY: build-run-seeker
 build-run-seeker: build-seeker
 	docker container run seeker
+
+.PHONY: build-compose
+build-compose:
+	docker-compose build
 
 .PHONY: help
 help: ## Display this help.

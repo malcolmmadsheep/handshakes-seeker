@@ -30,6 +30,16 @@ To rebuild app:
 make build-compose
 ```
 
+To create migration:
+
+```bash
+. ./scripts/create-migration.sh <migration_name> # under the hood it calls make add-migration
+
+# or
+
+MIGRATION_NAME=<migration_name> make add-migration
+```
+
 To investigate all available commands just run:
 
 ```bash

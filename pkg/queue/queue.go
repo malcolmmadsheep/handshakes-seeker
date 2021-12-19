@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-type Task = []byte
+type Task struct {
+	Id   uint
+	Body []byte
+}
 
 type ConsumerFunc = func(Task)
 
@@ -17,7 +20,7 @@ type Queue struct {
 
 type Config struct {
 	Delay     time.Duration
-	QueueSize int
+	QueueSize uint
 }
 
 func New(config Config) Queue {

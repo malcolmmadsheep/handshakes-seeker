@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/plugin"
@@ -15,6 +16,7 @@ func (p *WikipediaPlugin) GetName() string {
 }
 
 func (p *WikipediaPlugin) DoRequest(req plugin.Request) (plugin.Response, error) {
+	fmt.Println("Wikipedia does request:", req)
 	return plugin.Response{}, nil
 }
 

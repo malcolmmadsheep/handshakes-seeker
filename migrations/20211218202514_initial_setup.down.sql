@@ -1,1 +1,1 @@
-DROP TABLE IF NOT EXISTS tasks_queue;
+DROP TABLE IF EXISTS tasks_queue;

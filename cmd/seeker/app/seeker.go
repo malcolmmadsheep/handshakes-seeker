@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -20,6 +21,7 @@ type Seeker struct {
 	plugins     []plugin.Plugin
 	handlers    *ahandlers.Handlers
 	taskService services.TaskService
+	errorLogger *log.Logger
 }
 
 type Config struct{}
@@ -29,43 +31,52 @@ func New(shutdownCtx context.Context, cfg Config, handlers ahandlers.Handlers, t
 		return nil, errors.New("there should be at least one plugin provided")
 	}
 
+	errorLogger := log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	return &Seeker{
 		cfg,
 		plugins,
 		&handlers,
 		taskService,
+		errorLogger,
 	}, nil
 }
 
-func (s *Seeker) ReadTasks(pluginName string, n uint) ([]queue.Task, error) {
-	queueTasks := make([]queue.Task, 0, n)
-	tasks, err := s.taskService.GetNEarliestTasks(n)
+func taskToQueueTask(task *services.Task) (queue.Task, error) {
+	queueTask, err := json.Marshal(task)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, task := range tasks {
-		queueTasks = append(queueTasks, queue.Task{
-			Id:   task.Id,
-			Body: task.Body,
-		})
+	return queueTask, nil
+}
+
+func queueTaskToTask(queueTask queue.Task) (*services.Task, error) {
+	var task services.Task
+
+	err := json.Unmarshal(queueTask, &task)
+	if err != nil {
+		return nil, err
 	}
 
-	return queueTasks, nil
+	return &task, nil
+}
+
+func (s *Seeker) GetTasks(pluginName string, n uint) ([]*services.Task, error) {
+	return s.taskService.GetNEarliestTasks(n)
 }
 
 func (s *Seeker) startQueues() {
 	for _, _p := range s.plugins {
-		fmt.Println("run plugin")
 		_q := queue.New(_p.GetQueueConfig())
 
 		consumeTaskCh := _q.StartConsuming(context.Background())
 
 		go func(p plugin.Plugin, q *queue.Queue) {
 			for {
-				tasks, err := s.ReadTasks(p.GetName(), p.GetQueueConfig().QueueSize)
+				tasks, err := s.GetTasks(p.GetName(), p.GetQueueConfig().QueueSize)
 				if err != nil {
-					// add logging?
+					s.errorLogger.Printf("GetTasks: %s\n", err)
 					continue
 				}
 
@@ -74,30 +85,38 @@ func (s *Seeker) startQueues() {
 					continue
 				}
 
-				for _, t := range tasks {
-					_q.Publish(t)
-
-					err := s.taskService.DeleteTaskById(t.Id)
+				for _, task := range tasks {
+					queueTask, err := taskToQueueTask(task)
 					if err != nil {
-						// add logging
+						s.errorLogger.Printf("taskToQueueTask: %s\n", err)
+						continue
+					}
+					_q.Publish(queueTask)
+
+					err = s.taskService.DeleteTaskById(task.Id)
+					if err != nil {
+						s.errorLogger.Printf("DeleteTaskById: %s; %s\n", task.Id, err)
 					}
 				}
 			}
 		}(_p, &_q)
 
 		go func(p plugin.Plugin, consumeTaskCh <-chan queue.Task) {
-			for task := range consumeTaskCh {
-				var request plugin.Request
-
-				err := json.Unmarshal(task.Body, &request)
+			for queueTask := range consumeTaskCh {
+				task, err := queueTaskToTask(queueTask)
 				if err != nil {
-					// Add error handling
+					s.errorLogger.Printf("queueTaskToTask: %s\n", err)
 					continue
+				}
+				request := plugin.Request{
+					SourceUrl: task.SourceUrl,
+					DestUrl:   task.DestUrl,
+					Cursor:    task.Cursor,
 				}
 
 				_, err = p.DoRequest(request)
 				if err != nil {
-					// Add error handling
+					s.errorLogger.Printf("DoRequest. Plugin: %s; Error: %s\n", p.GetName(), err)
 					continue
 				}
 
@@ -128,7 +147,7 @@ func createHTTPServer(handlers *ahandlers.Handlers) *http.Server {
 func (s *Seeker) Run() error {
 	s.startQueues()
 
-	srv := createHTTPServer(s.handlers)
+	server := createHTTPServer(s.handlers)
 
-	return srv.ListenAndServe()
+	return server.ListenAndServe()
 }

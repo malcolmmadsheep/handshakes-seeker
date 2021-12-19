@@ -1,11 +1,12 @@
 package dbhandlers
 
 import (
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/malcolmmadsheep/handshakes-seeker/pkg/hashing"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
@@ -26,16 +27,23 @@ type CreateTaskReq struct {
 	DestUrl   string `json:"dest_url"`
 }
 
+func createTaskId(sourceUrl string, destUrl string) string {
+	return hashing.GetMD5Hash(sourceUrl + destUrl)
+}
+
 func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	var createTaskReq CreateTaskReq
+	err := json.NewDecoder(r.Body).Decode(&createTaskReq)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	if task, err := h.taskService.GetTaskByBody(body); err == nil {
+	taskId := createTaskId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
+
+	if task, err := h.taskService.GetTaskById(taskId); err == nil {
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{"taskId": "%d"}`, task.Id)
+		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 		return
 	} else if err != pgx.ErrNoRows {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -43,9 +51,9 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if task, err := h.taskService.CreateNewTask(body); err == nil {
+	if task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, ""); err == nil {
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{"taskId": "%d"}`, task.Id)
+		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)

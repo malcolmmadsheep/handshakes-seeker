@@ -1,0 +1,1 @@
+alter TABLE tasks queue drop COLUMN origin_task_id;

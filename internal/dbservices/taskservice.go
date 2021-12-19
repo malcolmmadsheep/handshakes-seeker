@@ -17,17 +17,47 @@ func NewTaskService(conn *pgx.Conn) *TaskService {
 	}
 }
 
-const getTaskByBodySQL = `
-select id from tasks_queue 
-where body = $1;
-`
+func scanTask(row pgx.Row) (*services.Task, error) {
+	task := services.Task{}
 
-func (ts *TaskService) GetTaskByBody(body []byte) (*services.Task, error) {
-	task := services.Task{
-		Body: body,
+	err := row.Scan(
+		&task.Id,
+		&task.OriginTaskId,
+		&task.DataSource,
+		&task.SourceUrl,
+		&task.DestUrl,
+		&task.Cursor,
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	err := ts.conn.QueryRow(context.Background(), getTaskByBodySQL, body).Scan(&task.Id)
+	return &task, nil
+}
+
+const getTaskByIdSQL = `
+select id, origin_task_id, data_source, source_url, dest_url, cursor 
+from tasks_queue
+where id = $1;
+`
+
+func (ts *TaskService) GetTaskById(id string) (*services.Task, error) {
+	task := services.Task{
+		Id: id,
+	}
+
+	err := ts.conn.QueryRow(
+		context.Background(),
+		getTaskByIdSQL,
+		id,
+	).Scan(
+		&task.Id,
+		&task.OriginTaskId,
+		&task.DataSource,
+		&task.SourceUrl,
+		&task.DestUrl,
+		&task.Cursor,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -36,27 +66,39 @@ func (ts *TaskService) GetTaskByBody(body []byte) (*services.Task, error) {
 }
 
 const createTaskSQL = `
-INSERT INTO tasks_queue (body)
-VALUES ($1)
+INSERT INTO tasks_queue (id, origin_task_id, data_source, source_url, dest_url, cursor)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id;
 `
 
-func (ts *TaskService) CreateNewTask(body []byte) (*services.Task, error) {
-	var taskId uint
-	err := ts.conn.QueryRow(context.Background(), createTaskSQL, body).Scan(&taskId)
+func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, cursor string) (*services.Task, error) {
+	_, err := ts.conn.Exec(
+		context.Background(),
+		createTaskSQL,
+		id,
+		originTaskId,
+		"",
+		sourceUrl,
+		destUrl,
+		cursor,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &services.Task{
-		Id:   taskId,
-		Body: body,
+		Id:           id,
+		OriginTaskId: originTaskId,
+		SourceUrl:    sourceUrl,
+		DestUrl:      destUrl,
+		Cursor:       cursor,
 	}, nil
 }
 
 const getNEarliestTasksSQL = `
-select id, body from tasks_queue
-order by id
+select id, origin_task_id, data_source, source_url, dest_url, cursor 
+from tasks_queue
+order by created_at
 limit $1;
 `
 
@@ -69,9 +111,7 @@ func (ts *TaskService) GetNEarliestTasks(n uint) ([]*services.Task, error) {
 	}
 
 	for rows.Next() {
-		task := &services.Task{}
-
-		err = rows.Scan(&task.Id, &task.Body)
+		task, err := scanTask(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -87,8 +127,19 @@ delete from tasks_queue
 where id = $1;
 `
 
-func (ts *TaskService) DeleteTaskById(id uint) error {
+func (ts *TaskService) DeleteTaskById(id string) error {
 	_, err := ts.conn.Exec(context.Background(), deleteTaskByIdSQL, id)
+
+	return err
+}
+
+const deleteAllTasksByOriginIdSQL = `
+delete from tasks_queue
+where origin_task_id = $1;
+`
+
+func (ts *TaskService) DeleteAllTasksWithOrigin(originId string) error {
+	_, err := ts.conn.Exec(context.Background(), deleteAllTasksByOriginIdSQL, originId)
 
 	return err
 }

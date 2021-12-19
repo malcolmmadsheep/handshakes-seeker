@@ -5,12 +5,7 @@ import (
 	"time"
 )
 
-type Task struct {
-	Id   uint
-	Body []byte
-}
-
-type ConsumerFunc = func(Task)
+type Task []byte
 
 type Queue struct {
 	tasks           chan Task
@@ -43,8 +38,6 @@ func (q *Queue) StartConsuming(ctx context.Context) <-chan Task {
 
 	go func() {
 		for {
-			time.Sleep(q.config.Delay)
-
 			select {
 			case <-ctx.Done():
 				return
@@ -55,6 +48,8 @@ func (q *Queue) StartConsuming(ctx context.Context) <-chan Task {
 					consumeChan <- task
 				}
 			}
+
+			time.Sleep(q.config.Delay)
 		}
 	}()
 

@@ -6,8 +6,9 @@ type Response struct {
 }
 
 type Request struct {
-	Source string `json:"source_url"`
-	Dest   string `json:"dest_url"`
+	SourceUrl string
+	DestUrl   string
+	Cursor    string
 }
 
 type Plugin interface {

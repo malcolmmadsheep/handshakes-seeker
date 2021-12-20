@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,14 +12,14 @@ import (
 
 	"github.com/gorilla/mux"
 	ahandlers "github.com/malcolmmadsheep/handshakes-seeker/pkg/handlers"
-	"github.com/malcolmmadsheep/handshakes-seeker/pkg/plugin"
-	"github.com/malcolmmadsheep/handshakes-seeker/pkg/queue"
+	aplugin "github.com/malcolmmadsheep/handshakes-seeker/pkg/plugin"
+	aqueue "github.com/malcolmmadsheep/handshakes-seeker/pkg/queue"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
 type Seeker struct {
 	cfg         Config
-	plugins     []plugin.Plugin
+	plugins     []aplugin.Plugin
 	handlers    *ahandlers.Handlers
 	taskService services.TaskService
 	errorLogger *log.Logger
@@ -26,7 +27,7 @@ type Seeker struct {
 
 type Config struct{}
 
-func New(shutdownCtx context.Context, cfg Config, handlers ahandlers.Handlers, taskService services.TaskService, plugins []plugin.Plugin) (*Seeker, error) {
+func New(shutdownCtx context.Context, cfg Config, handlers ahandlers.Handlers, taskService services.TaskService, plugins []aplugin.Plugin) (*Seeker, error) {
 	if len(plugins) == 0 {
 		return nil, errors.New("there should be at least one plugin provided")
 	}
@@ -42,7 +43,7 @@ func New(shutdownCtx context.Context, cfg Config, handlers ahandlers.Handlers, t
 	}, nil
 }
 
-func taskToQueueTask(task *services.Task) (queue.Task, error) {
+func taskToQueueTask(task *services.Task) (aqueue.Task, error) {
 	queueTask, err := json.Marshal(task)
 	if err != nil {
 		return nil, err
@@ -51,7 +52,7 @@ func taskToQueueTask(task *services.Task) (queue.Task, error) {
 	return queueTask, nil
 }
 
-func queueTaskToTask(queueTask queue.Task) (*services.Task, error) {
+func queueTaskToTask(queueTask aqueue.Task) (*services.Task, error) {
 	var task services.Task
 
 	err := json.Unmarshal(queueTask, &task)
@@ -67,12 +68,11 @@ func (s *Seeker) GetTasks(pluginName string, n uint) ([]*services.Task, error) {
 }
 
 func (s *Seeker) startQueues() {
-	for _, _p := range s.plugins {
-		_q := queue.New(_p.GetQueueConfig())
+	for _, plugin := range s.plugins {
+		queue := aqueue.New(plugin.GetQueueConfig())
 
-		consumeTaskCh := _q.StartConsuming(context.Background())
-
-		go func(p plugin.Plugin, q *queue.Queue) {
+		consumeTaskCh := queue.StartConsuming(context.Background())
+		go func(p aplugin.Plugin, q *aqueue.Queue) {
 			for {
 				tasks, err := s.GetTasks(p.GetName(), p.GetQueueConfig().QueueSize)
 				if err != nil {
@@ -91,7 +91,7 @@ func (s *Seeker) startQueues() {
 						s.errorLogger.Printf("taskToQueueTask: %s\n", err)
 						continue
 					}
-					_q.Publish(queueTask)
+					queue.Publish(queueTask)
 
 					err = s.taskService.DeleteTaskById(task.Id)
 					if err != nil {
@@ -99,30 +99,60 @@ func (s *Seeker) startQueues() {
 					}
 				}
 			}
-		}(_p, &_q)
+		}(plugin, &queue)
 
-		go func(p plugin.Plugin, consumeTaskCh <-chan queue.Task) {
+		go func(p aplugin.Plugin, consumeTaskCh <-chan aqueue.Task) {
 			for queueTask := range consumeTaskCh {
 				task, err := queueTaskToTask(queueTask)
 				if err != nil {
 					s.errorLogger.Printf("queueTaskToTask: %s\n", err)
 					continue
 				}
-				request := plugin.Request{
+
+				if s.taskService.ShouldSkipTask(task) {
+					continue
+				}
+
+				request := aplugin.Request{
 					SourceUrl: task.SourceUrl,
 					DestUrl:   task.DestUrl,
 					Cursor:    task.Cursor,
 				}
 
-				_, err = p.DoRequest(request)
+				response, err := p.DoRequest(request)
 				if err != nil {
 					s.errorLogger.Printf("DoRequest. Plugin: %s; Error: %s\n", p.GetName(), err)
 					continue
 				}
 
-				// add proper res processing
+				var foundConnection *aplugin.Connection
+
+				for _, connection := range response.Connections {
+					if connection.SourceUrl == connection.DestUrl {
+						foundConnection = &connection
+						break
+					}
+				}
+
+				if foundConnection != nil {
+					err = s.taskService.DeleteAllTasksWithOrigin(task.OriginTaskId)
+					if err != nil {
+						s.errorLogger.Printf("DeleteAllTasksWithOrigin. Plugin: %s; Error: %s\n", p.GetName(), err)
+					}
+					continue
+				}
+
+				for _, connection := range response.Connections {
+					s.taskService.CreateNewTask(
+						s.taskService.GenerateId(connection.SourceUrl, connection.DestUrl),
+						task.OriginTaskId,
+						connection.SourceUrl,
+						connection.DestUrl,
+						connection.Cursor,
+					)
+				}
 			}
-		}(_p, consumeTaskCh)
+		}(plugin, consumeTaskCh)
 	}
 }
 

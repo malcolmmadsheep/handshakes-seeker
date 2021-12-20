@@ -2,18 +2,22 @@ package dbservices
 
 import (
 	"context"
+	"sync"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/malcolmmadsheep/handshakes-seeker/pkg/hash"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
 type TaskService struct {
-	conn *pgx.Conn
+	conn        *pgx.Conn
+	skipTaskMap sync.Map
 }
 
 func NewTaskService(conn *pgx.Conn) *TaskService {
 	return &TaskService{
-		conn,
+		conn:        conn,
+		skipTaskMap: sync.Map{},
 	}
 }
 
@@ -33,6 +37,16 @@ func scanTask(row pgx.Row) (*services.Task, error) {
 	}
 
 	return &task, nil
+}
+
+func (ts *TaskService) ShouldSkipTask(task *services.Task) bool {
+	_, shouldSkip := ts.skipTaskMap.Load(task.OriginTaskId)
+
+	return shouldSkip
+}
+
+func (ts *TaskService) GenerateId(sourceUrl, destUrl string) string {
+	return hash.GetMD5Hash(sourceUrl + destUrl)
 }
 
 const getTaskByIdSQL = `
@@ -72,7 +86,12 @@ RETURNING id;
 `
 
 func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, cursor string) (*services.Task, error) {
-	_, err := ts.conn.Exec(
+	task, err := ts.GetTaskById(id)
+	if err == nil {
+		return task, nil
+	}
+
+	_, err = ts.conn.Exec(
 		context.Background(),
 		createTaskSQL,
 		id,
@@ -140,6 +159,11 @@ where origin_task_id = $1;
 
 func (ts *TaskService) DeleteAllTasksWithOrigin(originId string) error {
 	_, err := ts.conn.Exec(context.Background(), deleteAllTasksByOriginIdSQL, originId)
+	if err != nil {
+		return err
+	}
 
-	return err
+	ts.skipTaskMap.Store(originId, true)
+
+	return nil
 }

@@ -16,8 +16,12 @@ type Task struct {
 }
 
 type TaskService interface {
+	ShouldSkipTask(*Task) bool
+
+	GenerateId(sourceUrl, destUrl string) string
 	GetTaskById(id string) (*Task, error)
 	CreateNewTask(id, originalTaskId, sourceUrl, destUrl, cursor string) (*Task, error)
 	GetNEarliestTasks(uint) ([]*Task, error)
 	DeleteTaskById(string) error
+	DeleteAllTasksWithOrigin(string) error
 }

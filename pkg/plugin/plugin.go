@@ -2,7 +2,14 @@ package plugin
 
 import "github.com/malcolmmadsheep/handshakes-seeker/pkg/queue"
 
+type Connection struct {
+	SourceUrl string
+	DestUrl   string
+	Cursor    string
+}
+
 type Response struct {
+	Connections []Connection
 }
 
 type Request struct {
@@ -13,6 +20,6 @@ type Request struct {
 
 type Plugin interface {
 	GetName() string
-	DoRequest(Request) (Response, error)
+	DoRequest(Request) (*Response, error)
 	GetQueueConfig() queue.Config
 }

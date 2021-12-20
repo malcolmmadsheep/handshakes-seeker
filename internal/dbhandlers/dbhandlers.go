@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
-	"github.com/malcolmmadsheep/handshakes-seeker/pkg/hashing"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
@@ -27,10 +27,6 @@ type CreateTaskReq struct {
 	DestUrl   string `json:"dest_url"`
 }
 
-func createTaskId(sourceUrl string, destUrl string) string {
-	return hashing.GetMD5Hash(sourceUrl + destUrl)
-}
-
 func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 	var createTaskReq CreateTaskReq
 	err := json.NewDecoder(r.Body).Decode(&createTaskReq)
@@ -39,7 +35,7 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskId := createTaskId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
+	taskId := h.taskService.GenerateId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
 
 	if task, err := h.taskService.GetTaskById(taskId); err == nil {
 		w.WriteHeader(http.StatusCreated)
@@ -61,9 +57,16 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) DeleteTask(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+	params := mux.Vars(r)
 
-	fmt.Fprint(w, "DELETE OK")
+	if taskId, contains := params["taskId"]; contains {
+		h.taskService.DeleteAllTasksWithOrigin(taskId)
+
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	w.WriteHeader(http.StatusBadRequest)
 }
 
 func (h *Handlers) GetPath(w http.ResponseWriter, r *http.Request) {

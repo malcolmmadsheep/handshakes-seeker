@@ -38,6 +38,13 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 	taskId := h.taskService.GenerateId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
 
 	if task, err := h.taskService.GetTaskById(taskId); err == nil {
+		count, err := h.taskService.UpdateTaskRequestsCount(task.OriginTaskId, 1)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"error": "%s"}`, err)
+			return
+		}
+		fmt.Println("for id", taskId, "count", count)
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 		return
@@ -47,7 +54,7 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, ""); err == nil {
+	if task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, "", 1); err == nil {
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 	} else {
@@ -60,6 +67,17 @@ func (h *Handlers) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	if taskId, contains := params["taskId"]; contains {
+		count, err := h.taskService.UpdateTaskRequestsCount(taskId, -1)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if count > 0 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		h.taskService.DeleteAllTasksWithOrigin(taskId)
 
 		w.WriteHeader(http.StatusOK)

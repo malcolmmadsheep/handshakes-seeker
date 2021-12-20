@@ -7,12 +7,13 @@ type TaskBody struct {
 }
 
 type Task struct {
-	Id           string `json:"id"`
-	OriginTaskId string `json:"origin_task_id"`
-	DataSource   string `json:"data_source"`
-	SourceUrl    string `json:"source_url"`
-	DestUrl      string `json:"dest_url"`
-	Cursor       string `json:"cursor"`
+	Id            string `json:"id"`
+	OriginTaskId  string `json:"origin_task_id"`
+	DataSource    string `json:"data_source"`
+	SourceUrl     string `json:"source_url"`
+	DestUrl       string `json:"dest_url"`
+	Cursor        string `json:"cursor"`
+	RequestsCount int    `json:"requests_count"`
 }
 
 type TaskService interface {
@@ -20,8 +21,9 @@ type TaskService interface {
 
 	GenerateId(sourceUrl, destUrl string) string
 	GetTaskById(id string) (*Task, error)
-	CreateNewTask(id, originalTaskId, sourceUrl, destUrl, cursor string) (*Task, error)
+	CreateNewTask(id, originalTaskId, sourceUrl, destUrl, cursor string, requestsCount int) (*Task, error)
 	GetNEarliestTasks(uint) ([]*Task, error)
-	DeleteTaskById(string) error
+	DeleteTaskByIds(id, originId string) error
 	DeleteAllTasksWithOrigin(string) error
+	UpdateTaskRequestsCount(string, int) (int, error)
 }

@@ -40,9 +40,30 @@ func scanTask(row pgx.Row) (*services.Task, error) {
 }
 
 func (ts *TaskService) ShouldSkipTask(task *services.Task) bool {
-	_, shouldSkip := ts.skipTaskMap.Load(task.OriginTaskId)
+	count, contains := ts.skipTaskMap.Load(task.OriginTaskId)
 
-	return shouldSkip
+	return contains && count == 0
+}
+
+func (ts *TaskService) addTaskCount(id string, n int) int {
+	count, _ := ts.skipTaskMap.Load(id)
+
+	if count == nil {
+		ts.skipTaskMap.Store(id, n)
+		return n
+	}
+
+	newCount := count.(int) + n
+
+	return newCount
+}
+
+func (ts *TaskService) incrementTaskCount(id string) int {
+	return ts.addTaskCount(id, 1)
+}
+
+func (ts *TaskService) decrementTaskCount(id string) int {
+	return ts.addTaskCount(id, -1)
 }
 
 func (ts *TaskService) GenerateId(sourceUrl, destUrl string) string {
@@ -50,7 +71,7 @@ func (ts *TaskService) GenerateId(sourceUrl, destUrl string) string {
 }
 
 const getTaskByIdSQL = `
-select id, origin_task_id, data_source, source_url, dest_url, cursor 
+select id, origin_task_id, data_source, source_url, dest_url, cursor, requests_count
 from tasks_queue
 where id = $1;
 `
@@ -71,6 +92,7 @@ func (ts *TaskService) GetTaskById(id string) (*services.Task, error) {
 		&task.SourceUrl,
 		&task.DestUrl,
 		&task.Cursor,
+		&task.RequestsCount,
 	)
 	if err != nil {
 		return nil, err
@@ -80,12 +102,30 @@ func (ts *TaskService) GetTaskById(id string) (*services.Task, error) {
 }
 
 const createTaskSQL = `
-INSERT INTO tasks_queue (id, origin_task_id, data_source, source_url, dest_url, cursor)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO tasks_queue (id, origin_task_id, data_source, source_url, dest_url, cursor, requests_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id;
 `
 
-func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, cursor string) (*services.Task, error) {
+const updateTaskRequestCountSQL = `
+UPDATE tasks_queue
+set requests_count = requests_count + $1
+where origin_task_id = $2
+RETURNING requests_count;	
+`
+
+func (ts *TaskService) UpdateTaskRequestsCount(originTaskId string, n int) (int, error) {
+	count := 0
+
+	err := ts.conn.QueryRow(context.Background(), updateTaskRequestCountSQL, n, originTaskId).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, cursor string, requestsCount int) (*services.Task, error) {
 	task, err := ts.GetTaskById(id)
 	if err == nil {
 		return task, nil
@@ -100,10 +140,13 @@ func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, curso
 		sourceUrl,
 		destUrl,
 		cursor,
+		requestsCount,
 	)
 	if err != nil {
 		return nil, err
 	}
+
+	ts.incrementTaskCount(id)
 
 	return &services.Task{
 		Id:           id,
@@ -143,11 +186,11 @@ func (ts *TaskService) GetNEarliestTasks(n uint) ([]*services.Task, error) {
 
 const deleteTaskByIdSQL = `
 delete from tasks_queue
-where id = $1;
+where id = $1 and origin_task_id = $2;
 `
 
-func (ts *TaskService) DeleteTaskById(id string) error {
-	_, err := ts.conn.Exec(context.Background(), deleteTaskByIdSQL, id)
+func (ts *TaskService) DeleteTaskByIds(id string, originId string) error {
+	_, err := ts.conn.Exec(context.Background(), deleteTaskByIdSQL, id, originId)
 
 	return err
 }
@@ -158,12 +201,12 @@ where origin_task_id = $1;
 `
 
 func (ts *TaskService) DeleteAllTasksWithOrigin(originId string) error {
+	ts.decrementTaskCount(originId)
+
 	_, err := ts.conn.Exec(context.Background(), deleteAllTasksByOriginIdSQL, originId)
 	if err != nil {
 		return err
 	}
-
-	ts.skipTaskMap.Store(originId, true)
 
 	return nil
 }

@@ -93,7 +93,7 @@ func (s *Seeker) startQueues() {
 					}
 					queue.Publish(queueTask)
 
-					err = s.taskService.DeleteTaskById(task.Id)
+					err = s.taskService.DeleteTaskByIds(task.Id, task.OriginTaskId)
 					if err != nil {
 						s.errorLogger.Printf("DeleteTaskById: %s; %s\n", task.Id, err)
 					}
@@ -135,6 +135,7 @@ func (s *Seeker) startQueues() {
 				}
 
 				if foundConnection != nil {
+					fmt.Println("Success found path:", task.Id, foundConnection)
 					err = s.taskService.DeleteAllTasksWithOrigin(task.OriginTaskId)
 					if err != nil {
 						s.errorLogger.Printf("DeleteAllTasksWithOrigin. Plugin: %s; Error: %s\n", p.GetName(), err)
@@ -149,6 +150,7 @@ func (s *Seeker) startQueues() {
 						connection.SourceUrl,
 						connection.DestUrl,
 						connection.Cursor,
+						task.RequestsCount,
 					)
 				}
 			}

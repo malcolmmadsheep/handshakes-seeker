@@ -1,0 +1,1 @@
+alter TABLE tasks_queue drop COLUMN requests_count;

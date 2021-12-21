@@ -2,6 +2,7 @@ package dbservices
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v4"
@@ -40,10 +41,16 @@ func scanTask(row pgx.Row) (*services.Task, error) {
 	return &task, nil
 }
 
+func (ts *TaskService) CutUrlTitle(url string) string {
+	parts := strings.Split(url, "/")
+
+	return parts[len(parts)-1]
+}
+
 func (ts *TaskService) ShouldSkipTask(task *services.Task) bool {
 	count, contains := ts.skipTaskMap.Load(task.OriginTaskId)
 
-	return contains && count == 0
+	return contains && count.(int) <= 0
 }
 
 func (ts *TaskService) addTaskCount(id string, n int) int {
@@ -55,6 +62,7 @@ func (ts *TaskService) addTaskCount(id string, n int) int {
 	}
 
 	newCount := count.(int) + n
+	ts.skipTaskMap.Store(id, newCount)
 
 	return newCount
 }
@@ -201,7 +209,9 @@ where origin_task_id = $1;
 `
 
 func (ts *TaskService) DeleteAllTasksWithOrigin(originId string) error {
-	ts.decrementTaskCount(originId)
+	if ts.decrementTaskCount(originId) > 0 {
+		return nil
+	}
 
 	_, err := ts.conn.Exec(context.Background(), deleteAllTasksByOriginIdSQL, originId)
 	if err != nil {

@@ -48,5 +48,5 @@ type PathService interface {
 	CreateFoundPath(taskId, sourceUrl, destUrl, trace string) (*Path, error) // make it batch
 	BulkCreateFoundPaths([]PathShapeForBulk) error                           // make it batch
 	UpdatePathStatusByTaskId(taskId string, status PathStatus) error
-	BuildFullTraceAndUpdate(pathId uint) (string, error)
+	BuildFullTraceAndUpdate(path *Path) (*Path, error)
 }

@@ -18,6 +18,7 @@ type Task struct {
 
 type TaskService interface {
 	ShouldSkipTask(*Task) bool
+	CutUrlTitle(string) string
 
 	GenerateId(sourceUrl, destUrl string) string
 	GetTaskById(id string) (*Task, error)

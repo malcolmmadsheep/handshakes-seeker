@@ -105,10 +105,6 @@ func (ps *PathService) UpdatePathStatusByTaskId(taskId string, status services.P
 	return err
 }
 
-func (ps *PathService) BuildFullTraceAndUpdate(pathId uint) (string, error) {
-	return "<path_should_be_here>", nil
-}
-
 func (ps *PathService) CreateFoundPath(taskId, sourceUrl, destUrl, trace string) (*services.Path, error) {
 	return ps.createNewPath(taskId, sourceUrl, destUrl, trace, services.PathStatusFound)
 }
@@ -125,4 +121,48 @@ func (ps *PathService) BulkCreateFoundPaths(shapes []services.PathShapeForBulk) 
 	_, err := ps.conn.Exec(context.Background(), sb.String())
 
 	return err
+}
+
+const buildPathRecursivelySQL = `
+WITH RECURSIVE search AS (
+	SELECT source_url, destination_url,
+		   trace
+	FROM paths
+	WHERE source_url = $1
+ UNION ALL
+	SELECT p.source_url, p.destination_url,
+		   search.trace || ',' || p.destination_url
+	FROM paths as p
+	   JOIN search ON p.source_url = search.destination_url
+)
+SELECT * FROM search where destination_url = $2 and trace != '' limit 1;
+`
+
+const updatePathTraceSQL = `
+update paths
+set trace = $1
+where id = $2;
+`
+
+func (ps *PathService) BuildFullTraceAndUpdate(path *services.Path) (*services.Path, error) {
+	err := ps.conn.QueryRow(
+		context.Background(),
+		buildPathRecursivelySQL,
+		path.SourceUrl,
+		path.DestUrl,
+	).Scan(
+		&path.SourceUrl,
+		&path.DestUrl,
+		&path.Trace,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = ps.conn.Exec(context.Background(), updatePathTraceSQL, path.Trace, path.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return path, nil
 }

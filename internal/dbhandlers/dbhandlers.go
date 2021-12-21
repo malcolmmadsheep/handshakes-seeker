@@ -42,12 +42,13 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskId := h.taskService.GenerateId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
+	sourceUrlTitle := h.taskService.CutUrlTitle(createTaskReq.SourceUrl)
+	destUrlTitle := h.taskService.CutUrlTitle(createTaskReq.DestUrl)
+	taskId := h.taskService.GenerateId(sourceUrlTitle, destUrlTitle)
 
 	if task, err := h.taskService.GetTaskById(taskId); err == nil {
 		_, err := h.taskService.UpdateTaskRequestsCount(task.OriginTaskId, 1)
 		if err != nil {
-			fmt.Println("error here 1")
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, `{"error": "%s"}`, err)
 			return
@@ -56,16 +57,14 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 		return
 	} else if err != pgx.ErrNoRows {
-		fmt.Println("error here 2")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)
 		return
 	}
 
-	task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, "", 1)
+	task, err := h.taskService.CreateNewTask(taskId, taskId, sourceUrlTitle, destUrlTitle, "", 1)
 
 	if err != nil {
-		fmt.Println("error here 3")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)
 		return
@@ -74,7 +73,6 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 	_, err = h.pathService.GetPathByTaskId(taskId)
 	if err != nil {
 		if err != pgx.ErrNoRows {
-			fmt.Println("error here 4")
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, `{"error": "%s"}`, err)
 			return
@@ -83,7 +81,6 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	_, err = h.pathService.CreateNewPath(task)
 	if err != nil {
-		fmt.Println("error here 5")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)
 		return
@@ -128,14 +125,12 @@ func (h *Handlers) GetPath(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if path.Status == services.PathStatusFound.String() && path.Trace == "" {
-		trace, err := h.pathService.BuildFullTraceAndUpdate(path.Id)
+		path, err = h.pathService.BuildFullTraceAndUpdate(path)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, `{"error": "%s"}`, err)
 			return
 		}
-
-		path.Trace = trace
 	}
 
 	pathStr, err := json.Marshal(path)

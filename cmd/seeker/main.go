@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	seeker "github.com/malcolmmadsheep/handshakes-seeker/cmd/seeker/app"
 	"github.com/malcolmmadsheep/handshakes-seeker/internal/dbhandlers"
 	"github.com/malcolmmadsheep/handshakes-seeker/internal/dbservices"
@@ -17,7 +17,7 @@ func main() {
 	cfg := seeker.Config{}
 
 	log.Println("Connecting to database...")
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	conn, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Couldn't set up connection with database %s", err)
 	}
@@ -29,12 +29,14 @@ func main() {
 	}
 
 	taskService := dbservices.NewTaskService(conn)
-	handlers := dbhandlers.New(conn, taskService)
+	pathService := dbservices.NewPathService(conn)
+
+	handlers := dbhandlers.New(conn, taskService, pathService)
 	wikipediaPlugin := &plugins.WikipediaPlugin{}
 
 	plugins := []plugin.Plugin{wikipediaPlugin}
 
-	skr, err := seeker.New(context.Background(), cfg, handlers, taskService, plugins)
+	skr, err := seeker.New(context.Background(), cfg, handlers, taskService, pathService, plugins)
 	if err != nil {
 		log.Fatalf("Failed to run seeker: %s", err)
 	}

@@ -5,16 +5,17 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/hash"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
 type TaskService struct {
-	conn        *pgx.Conn
+	conn        *pgxpool.Pool
 	skipTaskMap sync.Map
 }
 
-func NewTaskService(conn *pgx.Conn) *TaskService {
+func NewTaskService(conn *pgxpool.Pool) *TaskService {
 	return &TaskService{
 		conn:        conn,
 		skipTaskMap: sync.Map{},
@@ -101,12 +102,6 @@ func (ts *TaskService) GetTaskById(id string) (*services.Task, error) {
 	return &task, nil
 }
 
-const createTaskSQL = `
-INSERT INTO tasks_queue (id, origin_task_id, data_source, source_url, dest_url, cursor, requests_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id;
-`
-
 const updateTaskRequestCountSQL = `
 UPDATE tasks_queue
 set requests_count = requests_count + $1
@@ -124,6 +119,11 @@ func (ts *TaskService) UpdateTaskRequestsCount(originTaskId string, n int) (int,
 
 	return count, nil
 }
+
+const createTaskSQL = `
+INSERT INTO tasks_queue (id, origin_task_id, data_source, source_url, dest_url, cursor, requests_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+`
 
 func (ts *TaskService) CreateNewTask(id, originTaskId, sourceUrl, destUrl, cursor string, requestsCount int) (*services.Task, error) {
 	task, err := ts.GetTaskById(id)

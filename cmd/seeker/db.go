@@ -8,10 +8,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-func runDBMigration(conn *pgx.Conn) error {
+func runDBMigration(conn *pgxpool.Pool) error {
 	m, err := migrate.New(
 		"file://migrations",
 		fmt.Sprintf("%s?sslmode=disable", os.Getenv("DATABASE_URL")))

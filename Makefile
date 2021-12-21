@@ -9,6 +9,9 @@ create_db_container = create_db_container
 run-dev: ## start full application as docker compose
 	docker-compose up
 
+.PHONY: build-and-run
+build-and-run: build-compose run-dev
+
 ##@ Database
 
 .PHONY: setup-db
@@ -30,6 +33,13 @@ add-migration: ## create new db migration. Migration name should be provided wit
 	if [[ "$(which migrate)" == "" ]]; then go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest; fi
 	if [[ "${MIGRATION_NAME}" == "" ]]; then echo "MIGRATION_NAME should be provided" && exit 1; fi
 	migrate create -ext sql -dir migrations ${MIGRATION_NAME}
+
+.PHONY: clear-db
+clear-db:
+	docker-compose up -d db
+	docker container exec -it handshakes-seeker_db_1 psql -h localhost -U postgres -d handshakes -c 'delete from tasks_queue;' || true
+	docker container exec -it handshakes-seeker_db_1 psql -h localhost -U postgres -d handshakes -c 'delete from paths;' || true
+	docker-compose down
 
 ##@ Build
 

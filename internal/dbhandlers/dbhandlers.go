@@ -7,18 +7,25 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/services"
 )
 
 type Handlers struct {
-	conn        *pgx.Conn
+	conn        *pgxpool.Pool
 	taskService services.TaskService
+	pathService services.PathService
 }
 
-func New(conn *pgx.Conn, taskService services.TaskService) *Handlers {
+func New(
+	conn *pgxpool.Pool,
+	taskService services.TaskService,
+	pathService services.PathService,
+) *Handlers {
 	return &Handlers{
 		conn,
 		taskService,
+		pathService,
 	}
 }
 
@@ -38,29 +45,52 @@ func (h *Handlers) CreateTask(w http.ResponseWriter, r *http.Request) {
 	taskId := h.taskService.GenerateId(createTaskReq.SourceUrl, createTaskReq.DestUrl)
 
 	if task, err := h.taskService.GetTaskById(taskId); err == nil {
-		count, err := h.taskService.UpdateTaskRequestsCount(task.OriginTaskId, 1)
+		_, err := h.taskService.UpdateTaskRequestsCount(task.OriginTaskId, 1)
 		if err != nil {
+			fmt.Println("error here 1")
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, `{"error": "%s"}`, err)
 			return
 		}
-		fmt.Println("for id", taskId, "count", count)
 		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 		return
 	} else if err != pgx.ErrNoRows {
+		fmt.Println("error here 2")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)
 		return
 	}
 
-	if task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, "", 1); err == nil {
-		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
-	} else {
+	task, err := h.taskService.CreateNewTask(taskId, taskId, createTaskReq.SourceUrl, createTaskReq.DestUrl, "", 1)
+
+	if err != nil {
+		fmt.Println("error here 3")
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"error": "%s"}`, err)
+		return
 	}
+
+	_, err = h.pathService.GetPathByTaskId(taskId)
+	if err != nil {
+		if err != pgx.ErrNoRows {
+			fmt.Println("error here 4")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"error": "%s"}`, err)
+			return
+		}
+	}
+
+	_, err = h.pathService.CreateNewPath(task)
+	if err != nil {
+		fmt.Println("error here 5")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "%s"}`, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, `{"taskId": "%s"}`, task.Id)
 }
 
 func (h *Handlers) DeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +118,33 @@ func (h *Handlers) DeleteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) GetPath(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+	taskId := mux.Vars(r)["taskId"]
 
-	fmt.Fprint(w, "GET OK")
+	path, err := h.pathService.GetPathByTaskId(taskId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "%s"}`, err)
+		return
+	}
+
+	if path.Status == services.PathStatusFound.String() && path.Trace == "" {
+		trace, err := h.pathService.BuildFullTraceAndUpdate(path.Id)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, `{"error": "%s"}`, err)
+			return
+		}
+
+		path.Trace = trace
+	}
+
+	pathStr, err := json.Marshal(path)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `{"error": "%s"}`, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"path": %s}`, pathStr)
 }

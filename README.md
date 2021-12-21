@@ -46,6 +46,13 @@ To investigate all available commands just run:
 make
 ```
 
+## Configuration
+
+Env variables, that can be passed to service:
+
+- `HANDSHAKES_WIKI_PLUGIN_DELAY` - positive number, Wikipedia plugin delay between requests
+- `HANDSHAKES_WIKI_QUEUE_SIZE` - positive number, Wikipedia plugin queue size
+
 ## TODO
 
 - [x] bootstrap repo
@@ -53,13 +60,14 @@ make
 - [x] implement queue
 - [x] configure Postgres container and setup connection within the service
 - [x] setup db migrations (go-migrate)
-- [ ] create tables in db
-- [ ] implement application logic
-- [ ] implement wikipedia plugin logic
-- [ ] add opportunity to configure using file and env variables
-- [ ] setup graceful shutdown
-- [ ] refactor
-- [ ] store secretes in env files
-- [ ] add tests
-- [ ] find a way for service scaling (running multiple instances in parallel without repeating tasks)
+- [x] create tables in db
+- [x] implement application logic
+- [x] implement wikipedia plugin logic
+- [x] add opportunity to configure using env variables
+- [ ] ☹️ setup graceful shutdown
+- [ ] ☹️ refactor
+- [ ] ☹️ store secretes in env files
+- [ ] ☹️ add tests
+- [ ] ☹️ find a way for service scaling (running multiple instances in parallel without repeating tasks)
+
 

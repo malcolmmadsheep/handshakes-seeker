@@ -8,6 +8,20 @@ Handshakes Seeker is a service for finding shortest path between 2 entities in a
 
 1. Docker
 
+## Initial run
+
+To create Docker volume for database run:
+
+```bash
+make setup-db
+```
+
+To build and run application run:
+
+```bash
+make build-and-run
+```
+
 ## Usage
 
 To setup Docker volume and create required database:

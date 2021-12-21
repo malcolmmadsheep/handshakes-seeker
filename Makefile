@@ -25,6 +25,7 @@ setup-db:
 	--name $(create_db_container) \
 	-e POSTGRES_PASSWORD=password \
 	postgres:14
+	sleep 5s
 	docker container exec -it $(create_db_container) psql -h localhost -U postgres -c 'create database handshakes;' || true
 	docker container stop $(create_db_container)	
 

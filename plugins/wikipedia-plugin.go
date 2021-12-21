@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/malcolmmadsheep/handshakes-seeker/pkg/aconfig"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/plugin"
 	"github.com/malcolmmadsheep/handshakes-seeker/pkg/queue"
 )
@@ -48,7 +49,7 @@ func (p *WikipediaPlugin) DoRequest(req plugin.Request) (*plugin.Response, error
 		"action":  {"query"},
 		"format":  {"json"},
 		"prop":    {"links"},
-		"pllimit": {"50"},
+		"pllimit": {"max"},
 		"titles":  {req.SourceUrl},
 	}
 
@@ -57,7 +58,6 @@ func (p *WikipediaPlugin) DoRequest(req plugin.Request) (*plugin.Response, error
 	}
 
 	apiUrl := fmt.Sprintf("%s?%s", WIKIPEDIA_API_BASE_URL, queryParams.Encode())
-	fmt.Println("Doing request to", apiUrl)
 	resp, err := client.Get(apiUrl)
 	if err != nil {
 		return nil, err
@@ -118,8 +118,11 @@ func (p *WikipediaPlugin) DoRequest(req plugin.Request) (*plugin.Response, error
 }
 
 func (p *WikipediaPlugin) GetQueueConfig() queue.Config {
+	delayInMs := aconfig.GetEnvOrInt("HANDSHAKES_WIKI_PLUGIN_DELAY", 500)
+	queueSize := aconfig.GetEnvOrInt("HANDSHAKES_WIKI_QUEUE_SIZE", 25)
+
 	return queue.Config{
-		Delay:     time.Second,
-		QueueSize: 25,
+		Delay:     time.Millisecond * time.Duration(delayInMs),
+		QueueSize: uint(queueSize),
 	}
 }
